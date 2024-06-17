@@ -286,7 +286,7 @@ struct tcp_handler_data
 
 #ifdef HAVE_SSL
 	/*
-	 * TLS object.
+	 * TLS objects.
 	 */
 	SSL* tls;
 	SSL* tls_auth;
@@ -3612,6 +3612,10 @@ service_remaining_tcp(struct nsd* nsd)
 			if((event&EV_READ))
 				fn = handle_tls_reading;
 			else	fn = handle_tls_writing;
+		} else if(p->tls_auth) {
+			if((event&EV_READ))
+				fn = handle_tls_reading;
+			else	fn = handle_tls_writing;
 		} else {
 #endif
 			if((event&EV_READ))
@@ -4672,17 +4676,17 @@ tls_handshake(struct tcp_handler_data* data, int fd, int writing)
 
 	/* (continue to) setup the TLS connection */
 	ERR_clear_error();
-	if(data->tls)
-		r = SSL_do_handshake(data->tls);
-	else if(data->tls_auth)
+	if(data->tls_auth)
 		r = SSL_do_handshake(data->tls_auth);
+	else
+		r = SSL_do_handshake(data->tls);
 
 	if(r != 1) {
 		int want;
-		if (data->tls)
-			want = SSL_get_error(data->tls, r);
-		else if(data->tls_auth)
+		if(data->tls_auth)
 			want = SSL_get_error(data->tls_auth, r);
+		else
+			want = SSL_get_error(data->tls, r);
 		if(want == SSL_ERROR_WANT_READ) {
 			if(data->shake_state == tls_hs_read) {
 				/* try again later */
@@ -4742,16 +4746,16 @@ more_read_buf_tls(int fd, struct tcp_handler_data* data, void* bufpos,
 {
 	int r;
 	ERR_clear_error();
-	if(data->tls)
-		r = (*received=SSL_read(data->tls, bufpos, add_amount));
-	else if(data->tls_auth)
+	if(data->tls_auth)
 		r = (*received=SSL_read(data->tls_auth, bufpos, add_amount));
+	else
+		r = (*received=SSL_read(data->tls, bufpos, add_amount));
 	if(r <= 0) {
 		int want;
-		if(data->tls)
-			want = SSL_get_error(data->tls, *received);
-		else if(data->tls_auth)
+		if(data->tls_auth)
 			want = SSL_get_error(data->tls_auth, *received);
+		else
+			want = SSL_get_error(data->tls, *received);
 		if(want == SSL_ERROR_ZERO_RETURN) {
 			cleanup_tcp_handler(data);
 			return 0; /* shutdown, closed */
@@ -5071,10 +5075,10 @@ handle_tls_writing(int fd, short event, void* arg)
 			return;
 	}
 
-	if(data->tls)
-		(void)SSL_set_mode(data->tls, SSL_MODE_ENABLE_PARTIAL_WRITE);
-	else if(data->tls_auth)
+	if(data->tls_auth)
 		(void)SSL_set_mode(data->tls_auth, SSL_MODE_ENABLE_PARTIAL_WRITE);
+	else
+		(void)SSL_set_mode(data->tls, SSL_MODE_ENABLE_PARTIAL_WRITE);
 
 	/* If we are writing the start of a message, we must include the length
 	 * this is done with a copy into write_buffer. */
@@ -5101,16 +5105,16 @@ handle_tls_writing(int fd, short event, void* arg)
 
 	/* Write the response */
 	ERR_clear_error();
-	if(data->tls)
-		sent = SSL_write(data->tls, buffer_current(write_buffer), buffer_remaining(write_buffer));
-	else if(data->tls_auth)
+	if(data->tls_auth)
 		sent = SSL_write(data->tls_auth, buffer_current(write_buffer), buffer_remaining(write_buffer));
+	else
+		sent = SSL_write(data->tls, buffer_current(write_buffer), buffer_remaining(write_buffer));
 	if(sent <= 0) {
 		int want;
-		if(data->tls)
-			want = SSL_get_error(data->tls, sent);
-		else if(data->tls_auth)
+		if(data->tls_auth)
 			want = SSL_get_error(data->tls_auth, sent);
+		else
+			want = SSL_get_error(data->tls, sent);
 		if(want == SSL_ERROR_ZERO_RETURN) {
 			cleanup_tcp_handler(data);
 			/* closed */
@@ -5311,7 +5315,10 @@ handle_tcp_accept(int fd, short event, void* arg)
 	tcp_data->query_count = 0;
 #ifdef HAVE_SSL
 	tcp_data->shake_state = tls_hs_none;
-	tcp_data->tls = NULL;
+	if (data->tls_accept)
+		tcp_data->tls = NULL;
+	if (data->tls_auth_accept)
+		tcp_data->tls_auth = NULL;
 #endif
 	tcp_data->query_needs_reset = 1;
 	tcp_data->pp2_enabled = data->pp2_enabled;
@@ -5346,21 +5353,27 @@ handle_tcp_accept(int fd, short event, void* arg)
 
 #ifdef HAVE_SSL
 	if (data->tls_accept) {
+		tcp_data->tls = NULL;
+		tcp_data->tls_auth = NULL;
 		tcp_data->tls = incoming_ssl_fd(tcp_data->nsd->tls_ctx, s);
 		if(!tcp_data->tls) {
 			close(s);
 			return;
 		}
+		tcp_data->query->tls = tcp_data->tls;
 		tcp_data->shake_state = tls_hs_read;
 		memset(&tcp_data->event, 0, sizeof(tcp_data->event));
 		event_set(&tcp_data->event, s, EV_PERSIST | EV_READ | EV_TIMEOUT,
 			  handle_tls_reading, tcp_data);
 	} else if (data->tls_auth_accept) {
+		tcp_data->tls = NULL;
+		tcp_data->tls_auth = NULL;
 		tcp_data->tls_auth = incoming_ssl_fd(tcp_data->nsd->tls_auth_ctx, s);
 		if(!tcp_data->tls_auth) {
 			close(s);
 			return;
 		}
+		tcp_data->query->tls_auth = tcp_data->tls_auth;
 		tcp_data->shake_state = tls_hs_read;
 		memset(&tcp_data->event, 0, sizeof(tcp_data->event));
 		event_set(&tcp_data->event, s, EV_PERSIST | EV_READ | EV_TIMEOUT,
