@@ -5107,10 +5107,10 @@ handle_tls_writing(int fd, short event, void* arg)
 		sent = SSL_write(data->tls, buffer_current(write_buffer), buffer_remaining(write_buffer));
 	if(sent <= 0) {
 		int want;
-		if(data->tls)
-			want = SSL_get_error(data->tls, sent);
-		else if(data->tls_auth)
+		if(data->tls_auth)
 			want = SSL_get_error(data->tls_auth, sent);
+		else
+			want = SSL_get_error(data->tls, sent);
 		if(want == SSL_ERROR_ZERO_RETURN) {
 			cleanup_tcp_handler(data);
 			/* closed */
