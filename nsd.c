@@ -1580,13 +1580,14 @@ main(int argc, char *argv[])
 	   && nsd.options->tls_service_pem && nsd.options->tls_service_pem[0]) {
 		/* normal tls port with no client authentication */
 		if(!(nsd.tls_ctx = server_tls_ctx_create(&nsd, NULL,
-		   nsd.options->tls_service_ocsp)))
-		   error("could not set up tls SSL_CTX");
+		     nsd.options->tls_service_ocsp)))
+			error("could not set up tls SSL_CTX");
 		/* tls-auth port with required client authentication */
 		if(nsd.options->tls_auth_port) {
-			if(!(nsd.tls_auth_ctx = server_tls_ctx_create(&nsd, (char*)nsd.options->tls_cert_bundle,
-			   nsd.options->tls_service_ocsp)))
-			   error("could not set up tls SSL_CTX");
+			if(!(nsd.tls_auth_ctx = server_tls_ctx_create(&nsd,
+			     (char*)nsd.options->tls_cert_bundle,
+			     nsd.options->tls_service_ocsp)))
+				error("could not set up tls SSL_CTX");
 		}
 	}
 #endif /* HAVE_SSL */
