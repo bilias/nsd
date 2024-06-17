@@ -930,7 +930,7 @@ xfrd_tcp_open(struct xfrd_tcp_set* set, struct xfrd_tcp_pipeline* tp,
 		   client will not try to authenticate to the server but the connection
 		   will procceed and will be up to the server to allow or deny the
 		   unauthenticated connection. A server that does not enforce authentication
-		   (or a badly configured server?) will allow the transfer.
+		   (or a badly configured server?) might allow the transfer.
 		   XXX: Maybe we should close the connection now to make it obvious that
 		   there is something wrong from our side. Alternatively make it obvious
 		   to the operator that we're not being authenticated to the server.
