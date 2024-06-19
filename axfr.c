@@ -188,6 +188,7 @@ static int axfr_ixfr_can_admit_query(struct nsd* nsd, struct query* q)
 	struct acl_options *acl = NULL;
 	struct zone_options* zone_opt;
 
+#ifdef HAVE_SSL
 	/* tls-auth-xfr-only is set and this is not an authenticated TLS */
 	if (nsd->options->tls_auth_xfr_only && !q->tls_auth) {
 		if (verbosity >= 2) {
@@ -205,6 +206,7 @@ static int axfr_ixfr_can_admit_query(struct nsd* nsd, struct query* q)
 		q->edns.ede = EDE_PROHIBITED;
 		return 0;
 	}
+#endif
 
 	zone_opt = zone_options_find(nsd->options, q->qname);
 	if(zone_opt && q->is_proxied && acl_check_incoming_block_proxy(
