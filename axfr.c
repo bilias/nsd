@@ -259,11 +259,10 @@ static int axfr_ixfr_can_admit_query(struct nsd* nsd, struct query* q)
 	if (verbosity >= 1) {
 		char a[128];
 		addr2str(&q->client_addr, a, sizeof(a));
-		VERBOSITY(1, (LOG_INFO, "%s for %s from %s %s%s",
+		VERBOSITY(1, (LOG_INFO, "%s for %s from %s %s",
 			(q->qtype==TYPE_AXFR?"axfr":"ixfr"),
 			dname_to_string(q->qname, NULL), a,
-			q->tls||q->tls_auth?"(tls":"",
-			q->tls_auth?"-auth-port)":"-port)"));
+			(q->tls||q->tls_auth)?(q->tls?"(tls)":"(tls-auth)"):""));
 			// XXX ADD VERIFIED
 	}
 	return 1;
