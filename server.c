@@ -286,7 +286,7 @@ struct tcp_handler_data
 
 #ifdef HAVE_SSL
 	/*
-	 * TLS object.
+	 * TLS objects.
 	 */
 	SSL* tls;
 	SSL* tls_auth;
@@ -5351,6 +5351,7 @@ handle_tcp_accept(int fd, short event, void* arg)
 			close(s);
 			return;
 		}
+		tcp_data->query->tls = tcp_data->tls;
 		tcp_data->shake_state = tls_hs_read;
 		memset(&tcp_data->event, 0, sizeof(tcp_data->event));
 		event_set(&tcp_data->event, s, EV_PERSIST | EV_READ | EV_TIMEOUT,
@@ -5361,6 +5362,7 @@ handle_tcp_accept(int fd, short event, void* arg)
 			close(s);
 			return;
 		}
+		tcp_data->query->tls_auth = tcp_data->tls_auth;
 		tcp_data->shake_state = tls_hs_read;
 		memset(&tcp_data->event, 0, sizeof(tcp_data->event));
 		event_set(&tcp_data->event, s, EV_PERSIST | EV_READ | EV_TIMEOUT,
