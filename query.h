@@ -79,13 +79,11 @@ struct query {
 
 	buffer_type *packet;
 
-#ifdef HAVE_SSL
 	/*
 	 * TLS objects.
 	*/
 	SSL* tls;
 	SSL* tls_auth;
-#endif
 
 	/* Normalized query domain name.  */
 	const dname_type *qname;
