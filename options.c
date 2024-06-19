@@ -14,6 +14,11 @@
 #ifdef HAVE_IFADDRS_H
 #include <ifaddrs.h>
 #endif
+#ifdef HAVE_SSL
+#include <openssl/ssl.h>
+#include <openssl/x509.h>
+#include <openssl/asn1.h>
+#endif
 #include "options.h"
 #include "query.h"
 #include "tsig.h"
@@ -1954,6 +1959,12 @@ acl_check_incoming(struct acl_options* acl, struct query* q,
 					*reason = acl;
 				return -1;
 			}
+#ifdef HAVE_SSL
+			if (acl->tls_client_cn && q->tls_auth) {
+				if (!acl_tls_cn_matches(q->tls_auth, acl->tls_client_cn))
+					return -1;
+			}
+#endif
 		}
 		number++;
 		acl = acl->next;
@@ -2157,6 +2168,41 @@ acl_addr_match_range_v6(uint32_t* minval, uint32_t* x, uint32_t* maxval, size_t 
 	return 1;
 }
 #endif /* INET6 */
+
+#ifdef HAVE_SSL
+int
+acl_tls_cn_matches(SSL* tls_auth, const char* acl_cert_cn)
+{
+	char *cn = NULL;
+	X509 *client_cert = SSL_get0_peer_certificate(tls_auth);
+	X509_NAME *subject_name = X509_get_subject_name(client_cert);
+	if (subject_name == NULL)
+		return 0;
+
+	int nid = OBJ_txt2nid("CN");
+	if (nid == NID_undef)
+		return 0;
+
+	int index = X509_NAME_get_index_by_NID(subject_name, nid, -1);
+	if (index < 0)
+		return 0;
+
+	X509_NAME_ENTRY *nentry = X509_NAME_get_entry(subject_name, index);
+	ASN1_STRING *value = X509_NAME_ENTRY_get_data(nentry);
+	if (value == NULL)
+		return 0;
+
+	cn = (char *)ASN1_STRING_get0_data(value);
+
+	/* client certificate CN matches acl tls_client_cn */
+	if (strncmp(cn, acl_cert_cn, strlen(acl_cert_cn))==0)
+		return 1;
+	else {
+		log_msg(LOG_ERR, "CN from cert of client is %s", cn);
+	}
+	return 0;
+}
+#endif
 
 int
 acl_key_matches(struct acl_options* acl, struct query* q)

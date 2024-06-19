@@ -32,6 +32,7 @@ extern config_parser_state_type *cfg_parser;
 
 static void append_acl(struct acl_options **list, struct acl_options *acl);
 static void add_to_last_acl(struct acl_options **list, char *ac);
+static void add_to_last_acl_cn(struct acl_options **list, char *ac);
 static int parse_boolean(const char *str, int *bln);
 static int parse_catalog_role(const char *str, int *role);
 static int parse_expire_expr(const char *str, long long *num, uint8_t *expr);
@@ -981,6 +982,8 @@ pattern_or_zone_option:
       acl_options_type *acl = parse_acl_info(cfg_parser->opt->region, $2, $3);
       append_acl(&cfg_parser->pattern->provide_xfr, acl);
     }
+	tls_client_cn
+	{ }
   | VAR_ALLOW_QUERY STRING STRING
     {
       acl_options_type *acl = parse_acl_info(cfg_parser->opt->region, $2, $3);
@@ -1196,6 +1199,11 @@ tlsauth_option:
 	{ char *tls_auth_name = region_strdup(cfg_parser->opt->region, $1);
 	  add_to_last_acl(&cfg_parser->pattern->request_xfr, tls_auth_name);} ;
 
+tls_client_cn:
+	| STRING
+	{ char *tls_client_cn = region_strdup(cfg_parser->opt->region, $1);
+	  add_to_last_acl_cn(&cfg_parser->pattern->provide_xfr, tls_client_cn);} ;
+
 catalog_role:
     STRING
     {
@@ -1231,6 +1239,17 @@ add_to_last_acl(struct acl_options **list, char *tls_auth_name)
 	while(tail->next != NULL)
 		tail = tail->next;
 	tail->tls_auth_name = tls_auth_name;
+}
+
+static void
+add_to_last_acl_cn(struct acl_options **list, char *tls_client_cn)
+{
+	struct acl_options *tail = *list;
+	assert(list != NULL);
+	assert(*list != NULL);
+	while(tail->next != NULL)
+		tail = tail->next;
+	tail->tls_client_cn = tls_client_cn;
 }
 
 static int
