@@ -2196,10 +2196,47 @@ int
 acl_tls_cn_matches(SSL* tls_auth, const char* acl_cert_cn, char** cert_cn)
 {
 	X509 *client_cert;
+	char *tmp_cert_cn = NULL;
+
 	if ((client_cert = SSL_get0_peer_certificate(tls_auth)) == NULL) {
 		DEBUG(DEBUG_XFRD,2, (LOG_INFO, "CN match fail no peer certificate"));
 		return 0;
 	}
+
+	/* semi follow RFC6125#section-6.4.4 check SAN DNS first */
+	STACK_OF(GENERAL_NAME) *subj_alt_names = (STACK_OF(GENERAL_NAME) *)X509_get_ext_d2i(client_cert, NID_subject_alt_name, NULL, NULL);
+	if (subj_alt_names != NULL) {
+		int cnt = sk_GENERAL_NAME_num(subj_alt_names);
+		for (int i = 0; i < cnt; i++) {
+			GENERAL_NAME *san_name = sk_GENERAL_NAME_value(subj_alt_names, i);
+			if (san_name->type != GEN_DNS)
+				continue;
+			ASN1_STRING *san_dns = san_name->d.dNSName;
+			if (san_dns == NULL)
+				continue;
+			char *san_cn = (char *)ASN1_STRING_get0_data(san_dns);
+			if (san_cn == NULL)
+				continue;
+			// Ensure that the SAN CN is properly null-terminated
+			int len = ASN1_STRING_length(san_dns);
+			char *san_cn_str = strndup(san_cn, len);
+			if (san_cn_str != NULL) {
+				*cert_cn = strndup(san_cn_str, strlen(san_cn_str));
+				// Use san_cn_str as needed
+				DEBUG(DEBUG_XFRD,2, (LOG_INFO, "SAN CN found: %s", san_cn_str));
+				/* client certificate CN matches acl tls_client_cn */
+				if (strncmp(san_cn_str, acl_cert_cn, strlen(acl_cert_cn))==0) {
+					return 1;
+				}
+			}
+		}
+		sk_GENERAL_NAME_pop_free(subj_alt_names, GENERAL_NAME_free);
+	} else {
+		DEBUG(DEBUG_XFRD,2, (LOG_INFO, "Failed to retrieve SAN DNS extension"));
+		// Handle case where SAN extension retrieval failed
+	}
+
+	DEBUG(DEBUG_XFRD,2, (LOG_INFO, "Continue with normal CN"));
 	X509_NAME *subject_name;
 	if ((subject_name = X509_get_subject_name(client_cert)) == NULL) {
 		DEBUG(DEBUG_XFRD,2, (LOG_INFO, "CN get subject fail"));
@@ -2225,15 +2262,18 @@ acl_tls_cn_matches(SSL* tls_auth, const char* acl_cert_cn, char** cert_cn)
 		DEBUG(DEBUG_XFRD,2, (LOG_INFO, "CN name data fail"));
 		return 0;
 	}
-	*cert_cn = (char *)ASN1_STRING_get0_data(value);
-	if (*cert_cn == NULL) {
+	tmp_cert_cn = (char *)ASN1_STRING_get0_data(value);
+
+	if (tmp_cert_cn == NULL) {
 		DEBUG(DEBUG_XFRD,2, (LOG_INFO, "CN string data fail"));
 		return 0;
 	}
 
+	*cert_cn = strndup(tmp_cert_cn, strlen(tmp_cert_cn));
 	/* client certificate CN matches acl tls_client_cn */
-	if (strncmp(*cert_cn, acl_cert_cn, strlen(acl_cert_cn))==0)
+	if (strncmp(tmp_cert_cn, acl_cert_cn, strlen(acl_cert_cn))==0) {
 		return 1;
+	}
 	return 0;
 }
 #endif

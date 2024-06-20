@@ -12,6 +12,7 @@
 
 #ifdef HAVE_SSL
 #include <openssl/ssl.h>
+#include <openssl/x509v3.h>
 #endif
 
 #include <stdarg.h>
