@@ -290,6 +290,13 @@ parse_options_file(struct nsd_options* opt, const char* file,
 		}
 		for(acl=pat->provide_xfr; acl; acl=acl->next)
 		{
+			/* Find tls_auth */
+			if (!acl->tls_auth_name)
+				; /* pass */
+			else if (!(acl->tls_auth_options =
+			                tls_auth_options_find(opt, acl->tls_auth_name)))
+				c_error("tls_auth %s in pattern %s could not be found",
+						acl->tls_auth_name, pat->pname);
 			if(acl->nokey || acl->blocked)
 				continue;
 			acl->key_options = key_options_find(opt, acl->key_name);
@@ -1940,6 +1947,12 @@ acl_check_incoming(struct acl_options* acl, struct query* q,
 
 	while(acl)
 	{
+#ifdef HAVE_SSL
+		DEBUG(DEBUG_XFRD,2, (LOG_INFO, "testing acl %s %s %s",
+			acl->ip_address_spec, acl->nokey?"NOKEY":
+			(acl->blocked?"BLOCKED":acl->key_name),
+			(acl->tls_auth_name && q->tls_auth)?acl->tls_auth_name:""));
+#endif
 		DEBUG(DEBUG_XFRD,2, (LOG_INFO, "testing acl %s %s",
 			acl->ip_address_spec, acl->nokey?"NOKEY":
 			(acl->blocked?"BLOCKED":acl->key_name)));
@@ -1955,6 +1968,28 @@ acl_check_incoming(struct acl_options* acl, struct query* q,
 				return -1;
 			}
 		}
+#ifdef HAVE_SSL
+		/* we are in a acl with tls_auth */
+		if (acl->tls_auth_name && q->tls_auth) {
+			/* we have auth_domain_name in tls_auth */
+			if (acl->tls_auth_options && acl->tls_auth_options->auth_domain_name) {
+				q->cert_cn = NULL;
+				if (!acl_tls_cn_matches(q->tls_auth, acl->tls_auth_options->auth_domain_name, &(q->cert_cn))) {
+					DEBUG(DEBUG_XFRD,2, (LOG_INFO,
+							"client cert with CN=%s does not match %s CN=%s",
+							q->cert_cn, acl->tls_auth_name, acl->tls_auth_options->auth_domain_name));
+					q->cert_cn = NULL;
+					return -1;
+				}
+				DEBUG(DEBUG_XFRD,2, (LOG_INFO, "%s CN=%s verified",
+					acl->tls_auth_name, acl->tls_auth_options->auth_domain_name));
+				q->cert_cn = acl->tls_auth_options->auth_domain_name;
+			} else {
+				/* nsd gives error on start for this, but check just in case */
+				log_msg(LOG_ERR, "auth-domain-name not defined in %s", acl->tls_auth_name);
+			}
+		}
+#endif
 		number++;
 		acl = acl->next;
 	}
@@ -2157,6 +2192,95 @@ acl_addr_match_range_v6(uint32_t* minval, uint32_t* x, uint32_t* maxval, size_t 
 	return 1;
 }
 #endif /* INET6 */
+
+#ifdef HAVE_SSL
+int
+acl_tls_cn_matches(SSL* tls_auth, const char* acl_cert_cn, char** cert_cn)
+{
+	X509 *client_cert;
+	char *tmp_cert_cn = NULL;
+	if ((client_cert = SSL_get0_peer_certificate(tls_auth)) == NULL) {
+		DEBUG(DEBUG_XFRD,2, (LOG_INFO, "CN match fail no peer certificate"));
+		return 0;
+	}
+
+	/* semi follow RFC6125#section-6.4.4 check SAN DNS first */
+	STACK_OF(GENERAL_NAME) *subj_alt_names = (STACK_OF(GENERAL_NAME) *)X509_get_ext_d2i(client_cert, NID_subject_alt_name, NULL, NULL);
+	if (subj_alt_names != NULL) {
+		int cnt = sk_GENERAL_NAME_num(subj_alt_names);
+		for (int i = 0; i < cnt; i++) {
+			GENERAL_NAME *san_name = sk_GENERAL_NAME_value(subj_alt_names, i);
+			if (san_name->type != GEN_DNS)
+				continue;
+			ASN1_STRING *san_dns = san_name->d.dNSName;
+			if (san_dns == NULL)
+				continue;
+			char *san_cn = (char *)ASN1_STRING_get0_data(san_dns);
+			if (san_cn == NULL)
+				continue;
+			/* Ensure SAN CN is properly null terminated */
+			int len = ASN1_STRING_length(san_dns);
+			char *san_cn_str = strndup(san_cn, len);
+			if (san_cn_str != NULL) {
+				*cert_cn = strndup(san_cn_str, strlen(san_cn_str));
+				/* SAN match */
+				if (strncmp(san_cn_str, acl_cert_cn, strlen(acl_cert_cn))==0) {
+					DEBUG(DEBUG_XFRD,2, (LOG_INFO, "SAN CN %s matches acl", san_cn_str));
+					return 1;
+				} else {
+					DEBUG(DEBUG_XFRD,2, (LOG_INFO, "SAN CN %s does not match acl", san_cn_str));
+					/* check with rest of SANs and then continue with normal CN check */
+				}
+			}
+		}
+		sk_GENERAL_NAME_pop_free(subj_alt_names, GENERAL_NAME_free);
+	} else {
+		DEBUG(DEBUG_XFRD,2, (LOG_INFO, "Failed to retrieve SAN DNS extension"));
+	}
+
+	/* no match on SAN, continue with normal CN */
+	X509_NAME *subject_name;
+	if ((subject_name = X509_get_subject_name(client_cert)) == NULL) {
+		DEBUG(DEBUG_XFRD,2, (LOG_INFO, "CN get subject fail"));
+		return 0;
+	}
+	int nid;
+	if((nid = OBJ_txt2nid("CN")) == NID_undef) {
+		DEBUG(DEBUG_XFRD,2, (LOG_INFO, "CN txt2nid fail"));
+		return 0;
+	}
+	int index;
+	if ((index = X509_NAME_get_index_by_NID(subject_name, nid, -1)) < 0 ) {
+		DEBUG(DEBUG_XFRD,2, (LOG_INFO, "CN get name index by nid fail"));
+		return 0;
+	}
+	X509_NAME_ENTRY *nentry;
+	if ((nentry = X509_NAME_get_entry(subject_name, index)) == NULL) {
+		DEBUG(DEBUG_XFRD,2, (LOG_INFO, "CN name entry fail"));
+		return 0;
+	}
+	ASN1_STRING *value;
+	if ((value = X509_NAME_ENTRY_get_data(nentry)) == NULL) {
+		DEBUG(DEBUG_XFRD,2, (LOG_INFO, "CN name data fail"));
+		return 0;
+	}
+	tmp_cert_cn = (char *)ASN1_STRING_get0_data(value);
+
+	if (tmp_cert_cn == NULL) {
+		DEBUG(DEBUG_XFRD,2, (LOG_INFO, "CN string data fail"));
+		return 0;
+	}
+
+	*cert_cn = strndup(tmp_cert_cn, strlen(tmp_cert_cn));
+
+	/* certificate CN match */
+	if (strncmp(tmp_cert_cn, acl_cert_cn, strlen(acl_cert_cn))==0) {
+		return 1;
+	}
+	DEBUG(DEBUG_XFRD,2, (LOG_INFO, "CN from cert %s does not match acl", tmp_cert_cn));
+	return 0;
+}
+#endif
 
 int
 acl_key_matches(struct acl_options* acl, struct query* q)

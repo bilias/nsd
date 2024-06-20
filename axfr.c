@@ -195,7 +195,7 @@ static int axfr_ixfr_can_admit_query(struct nsd* nsd, struct query* q)
 			char address[128], proxy[128];
 			addr2str(&q->client_addr, address, sizeof(address));
 			addr2str(&q->remote_addr, proxy, sizeof(proxy));
-			VERBOSITY(2, (LOG_INFO, "%s for %s from %s refused (tls-auth-xfr-only)",
+			VERBOSITY(2, (LOG_INFO, "%s for %s from %s refused tls-auth-xfr-only",
 				(q->qtype==TYPE_AXFR?"axfr":"ixfr"),
 				dname_to_string(q->qname, NULL),
 				address));
@@ -262,11 +262,11 @@ static int axfr_ixfr_can_admit_query(struct nsd* nsd, struct query* q)
 		char a[128];
 		addr2str(&q->client_addr, a, sizeof(a));
 #ifdef HAVE_SSL
-		VERBOSITY(1, (LOG_INFO, "%s for %s from %s %s",
+		VERBOSITY(1, (LOG_INFO, "%s for %s from %s %s %s",
 			(q->qtype==TYPE_AXFR?"axfr":"ixfr"),
 			dname_to_string(q->qname, NULL), a,
-			(q->tls||q->tls_auth)?(q->tls?"(tls)":"(tls-auth)"):""));
-			// XXX ADD VERIFIED
+			(q->tls||q->tls_auth)?(q->tls?"tls":"tls-auth"):"",
+			q->cert_cn?q->cert_cn:"cn-not-verified"));
 #else
 		VERBOSITY(1, (LOG_INFO, "%s for %s from %s %s",
 			(q->qtype==TYPE_AXFR?"axfr":"ixfr"),
