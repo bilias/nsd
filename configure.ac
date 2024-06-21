@@ -1071,7 +1071,9 @@ AC_INCLUDES_DEFAULT
 #endif
 #include <openssl/ssl.h>
 #include <openssl/evp.h>
+#ifdef HAVE_OPENSSL_X509V3_h
 #include <openssl/x509v3.h>
+#endif
 ])
 	AC_CHECK_DECL([TLS1_3_VERSION], 
 		[AC_DEFINE([HAVE_TLS_1_3], [1], [Define if TLS 1.3 is supported by OpenSSL])],
