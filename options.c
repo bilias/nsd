@@ -1975,13 +1975,13 @@ acl_check_incoming(struct acl_options* acl, struct query* q,
 			if (acl->tls_auth_options && acl->tls_auth_options->auth_domain_name) {
 				q->cert_cn = NULL;
 				if (!acl_tls_cn_matches(q->tls_auth, acl->tls_auth_options->auth_domain_name, &(q->cert_cn))) {
-					DEBUG(DEBUG_XFRD,2, (LOG_INFO,
+					VERBOSITY(2, (LOG_WARNING,
 							"client cert with CN=%s does not match %s CN=%s",
 							q->cert_cn, acl->tls_auth_name, acl->tls_auth_options->auth_domain_name));
 					q->cert_cn = NULL;
 					return -1;
 				}
-				DEBUG(DEBUG_XFRD,2, (LOG_INFO, "%s CN=%s verified",
+				VERBOSITY(5, (LOG_INFO, "%s CN=%s verified",
 					acl->tls_auth_name, acl->tls_auth_options->auth_domain_name));
 				q->cert_cn = acl->tls_auth_options->auth_domain_name;
 			} else {
