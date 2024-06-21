@@ -5353,6 +5353,7 @@ handle_tcp_accept(int fd, short event, void* arg)
 
 #ifdef HAVE_SSL
 	if (data->tls_accept) {
+		tcp_data->tls = NULL;
 		tcp_data->tls_auth = NULL;
 		tcp_data->tls = incoming_ssl_fd(tcp_data->nsd->tls_ctx, s);
 		if(!tcp_data->tls) {
@@ -5366,6 +5367,7 @@ handle_tcp_accept(int fd, short event, void* arg)
 			  handle_tls_reading, tcp_data);
 	} else if (data->tls_auth_accept) {
 		tcp_data->tls = NULL;
+		tcp_data->tls_auth = NULL;
 		tcp_data->tls_auth = incoming_ssl_fd(tcp_data->nsd->tls_auth_ctx, s);
 		if(!tcp_data->tls_auth) {
 			close(s);
