@@ -881,8 +881,8 @@ Kaminsky\-style attacks. If the UDP option is left out then IXFR will be
 transmitted using TCP.
 .P
 If a tls-auth-name is given then TLS (by default on port 853) will be used
-for all zone transfers for the zone. If authentication of the primary based on
-the specified tls-auth authentication information fails, the XFR request will
+for all zone transfers for the zone. If authentication of the primary, based on
+the specified tls-auth authentication information, fails the XFR request will
 not be sent. Support for TLS 1.3 is required for XFR-over-TLS.
 .RE
 .TP
@@ -933,7 +933,7 @@ of the defined
 The certificate validify is also verified with
 .BR tls-cert-bundle .
 If authentication of the secondary, based on the specified tls-auth authentication
-information fails, the XFR zone transfer will be refused. If the connection is performed
+information, fails the XFR zone transfer will be refused. If the connection is performed
 on the
 .BR tls-port
 then no authentication will be performed and the transfer will not be refused.
