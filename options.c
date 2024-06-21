@@ -1975,7 +1975,7 @@ acl_check_incoming(struct acl_options* acl, struct query* q,
 			if (acl->tls_auth_options && acl->tls_auth_options->auth_domain_name) {
 				q->cert_cn = NULL;
 				if (!acl_tls_cn_matches(q->tls_auth, acl->tls_auth_options->auth_domain_name, &(q->cert_cn))) {
-					VERBOSITY(2, (LOG_WARNING,
+					VERBOSITY(3, (LOG_WARNING,
 							"client cert with CN=%s does not match %s CN=%s",
 							q->cert_cn, acl->tls_auth_name, acl->tls_auth_options->auth_domain_name));
 					q->cert_cn = NULL;
