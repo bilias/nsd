@@ -5311,7 +5311,10 @@ handle_tcp_accept(int fd, short event, void* arg)
 	tcp_data->query_count = 0;
 #ifdef HAVE_SSL
 	tcp_data->shake_state = tls_hs_none;
-	tcp_data->tls = NULL;
+	if (data->tls_accept)
+		tcp_data->tls = NULL;
+	if (data->tls_auth_accept)
+		tcp_data->tls_auth = NULL;
 #endif
 	tcp_data->query_needs_reset = 1;
 	tcp_data->pp2_enabled = data->pp2_enabled;
