@@ -2218,17 +2218,17 @@ acl_tls_cn_matches(SSL* tls_auth, const char* acl_cert_cn, char** cert_cn)
 			char *san_cn = (char *)ASN1_STRING_get0_data(san_dns);
 			if (san_cn == NULL)
 				continue;
-			/* Ensure SAN CN is properly null terminated */
+			/* Ensure SAN is properly null terminated */
 			int len = ASN1_STRING_length(san_dns);
 			char *san_cn_str = strndup(san_cn, len);
 			if (san_cn_str != NULL) {
 				*cert_cn = strndup(san_cn_str, strlen(san_cn_str));
-				/* SAN match */
+				/* certificate SAN match */
 				if (strncmp(san_cn_str, acl_cert_cn, strlen(acl_cert_cn))==0) {
-					DEBUG(DEBUG_XFRD,2, (LOG_INFO, "SAN CN %s matches acl", san_cn_str));
+					DEBUG(DEBUG_XFRD,2, (LOG_INFO, "SAN %s matches acl", san_cn_str));
 					return 1;
 				} else {
-					DEBUG(DEBUG_XFRD,2, (LOG_INFO, "SAN CN %s does not match acl", san_cn_str));
+					DEBUG(DEBUG_XFRD,2, (LOG_INFO, "SAN %s does not match acl", san_cn_str));
 					/* check with rest of SANs and then continue with normal CN check */
 				}
 			}
