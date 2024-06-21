@@ -3612,6 +3612,10 @@ service_remaining_tcp(struct nsd* nsd)
 			if((event&EV_READ))
 				fn = handle_tls_reading;
 			else	fn = handle_tls_writing;
+		else if(p->tls_auth) {
+			if((event&EV_READ))
+				fn = handle_tls_reading;
+			else	fn = handle_tls_writing;
 		} else {
 #endif
 			if((event&EV_READ))
