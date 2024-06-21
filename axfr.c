@@ -273,7 +273,7 @@ static int axfr_ixfr_can_admit_query(struct nsd* nsd, struct query* q)
 			(q->qtype==TYPE_AXFR?"axfr":"ixfr"),
 			dname_to_string(q->qname, NULL), a,
 			(q->tls||q->tls_auth)?(q->tls?"tls":"tls-auth"):"",
-			q->cert_cn?q->cert_cn:"cn-not-verified"));
+			q->cert_cn?q->cert_cn:"not-verified"));
 #else
 		VERBOSITY(1, (LOG_INFO, "%s for %s from %s %s",
 			(q->qtype==TYPE_AXFR?"axfr":"ixfr"),
