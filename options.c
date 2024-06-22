@@ -2198,10 +2198,14 @@ int
 acl_tls_cn_matches(SSL* tls_auth, const char* acl_cert_cn, char** cert_cn)
 {
 	X509 *client_cert;
+	*cert_cn = NULL;
+
 	if ((client_cert = SSL_get0_peer_certificate(tls_auth)) == NULL) {
 		DEBUG(DEBUG_XFRD,2, (LOG_INFO, "CN match fail no peer certificate"));
 		return 0;
 	}
+	if (!acl_cert_cn || !client_cert)
+		return 0;
 
 	/* OpenSSL provides functions for hostname checking from certificate
 	 * Following code should work but it doesn't.
@@ -2215,84 +2219,101 @@ acl_tls_cn_matches(SSL* tls_auth, const char* acl_cert_cn, char** cert_cn)
 	 * const char *peername = X509_VERIFY_PARAM_get0_peername(vpm); // NOT ok
 	 */
 
+/* Code bellow from
+ * https://wiki.openssl.org/index.php/Hostname_validation
+ * with modifications
+ *
+ * Obtained from: https://github.com/iSECPartners/ssl-conservatory
+ * Copyright (C) 2012, iSEC Partners.
+ * License: MIT License
+ * Author:  Alban Diquet
+ */
+
 	/* semi follow RFC6125#section-6.4.4 check SAN DNS first */
-	STACK_OF(GENERAL_NAME) *subj_alt_names = (STACK_OF(GENERAL_NAME) *)X509_get_ext_d2i(client_cert, NID_subject_alt_name, NULL, NULL);
-	if (subj_alt_names != NULL) {
-		int cnt = sk_GENERAL_NAME_num(subj_alt_names);
-		for (int i = 0; i < cnt; i++) {
-			GENERAL_NAME *san_name = sk_GENERAL_NAME_value(subj_alt_names, i);
-			if (san_name->type != GEN_DNS)
+	int i;
+	int san_names_nb = -1;
+	STACK_OF(GENERAL_NAME) *san_names = NULL;
+
+	/* Try to extract the names within the SAN extension from the certificate */
+	san_names = X509_get_ext_d2i(client_cert, NID_subject_alt_name, NULL, NULL);
+	if (san_names != NULL) {
+		san_names_nb = sk_GENERAL_NAME_num(san_names);
+
+		/* Check each name within the extension */
+		for (int i = 0; i < san_names_nb; i++) {
+			const GENERAL_NAME *current_name = sk_GENERAL_NAME_value(san_names, i);
+			/* skip non-DNS SAN entries */
+			if (current_name->type != GEN_DNS)
 				continue;
-			ASN1_STRING *san_dns = san_name->d.dNSName;
-			if (san_dns == NULL)
+			char *dns_name = (char *) ASN1_STRING_get0_data(current_name->d.dNSName);
+			if (dns_name == NULL)
 				continue;
-			char *tmp_san = NULL;
-			tmp_san = (char *)ASN1_STRING_get0_data(san_dns);
-			if (tmp_san == NULL)
-				continue;
-			/* Ensure SAN is properly null terminated */
-			int len = ASN1_STRING_length(san_dns);
-			char *tmp_san_str = strndup(tmp_san, len);
-			if (tmp_san_str != NULL) {
-				*cert_cn = strndup(tmp_san_str, strlen(tmp_san_str));
-				/* certificate SAN match */
-				if (strncmp(tmp_san_str, acl_cert_cn, strlen(acl_cert_cn))==0) {
-					DEBUG(DEBUG_XFRD,2, (LOG_INFO, "SAN %s matches acl", tmp_san_str));
+			/* Make sure there isn't an embedded NUL character in the DNS name */
+			if ((size_t)ASN1_STRING_length(current_name->d.dNSName) != strlen(dns_name)) {
+				DEBUG(DEBUG_XFRD,2, (LOG_WARNING, "SAN Malformed certificate"));
+				break;
+			}
+			if (dns_name != NULL) {
+				/* certificate SAN DNS match */
+				if (strncmp(dns_name, acl_cert_cn, strlen(acl_cert_cn))==0) {
+					DEBUG(DEBUG_XFRD,2, (LOG_INFO, "SAN %s matches acl", dns_name));
+					*cert_cn = strndup(dns_name, strlen(dns_name));
 					return 1;
 				} else {
-					DEBUG(DEBUG_XFRD,2, (LOG_INFO, "SAN %s does not match acl", tmp_san_str));
-					/* check with rest of SANs and then continue with normal CN check */
+					DEBUG(DEBUG_XFRD,2, (LOG_INFO, "SAN %s does not match acl", dns_name));
+					/* check with remaining SANs and then continue with normal CN check */
 				}
 			}
 		}
-		sk_GENERAL_NAME_pop_free(subj_alt_names, GENERAL_NAME_free);
+		sk_GENERAL_NAME_pop_free(san_names, GENERAL_NAME_free);
 	} else {
 		DEBUG(DEBUG_XFRD,2, (LOG_INFO, "No SAN DNS extension in certificate"));
 	}
 
 	/* no match on SAN, continue with normal CN */
-	X509_NAME *subject_name;
+	int common_name_loc = -1;
+	char *common_name_str = NULL;
+	X509_NAME *subject_name = NULL;
+	X509_NAME_ENTRY *common_name_entry = NULL;
+	ASN1_STRING *common_name_asn1 = NULL;
+
 	if ((subject_name = X509_get_subject_name(client_cert)) == NULL) {
-		DEBUG(DEBUG_XFRD,2, (LOG_INFO, "CN get subject fail"));
+		DEBUG(DEBUG_XFRD,2, (LOG_INFO, "CN get subject failed"));
 		return 0;
 	}
-	int cn_nid;
-	if((cn_nid = OBJ_txt2nid("CN")) == NID_undef) {
-		DEBUG(DEBUG_XFRD,2, (LOG_INFO, "CN txt2nid fail"));
+	/* Find the position of the CN field in the Subject field of the certificate */
+	common_name_loc = X509_NAME_get_index_by_NID(subject_name, NID_commonName, -1);
+	if (common_name_loc < 0) {
+		DEBUG(DEBUG_XFRD,2, (LOG_INFO, "CN not found in Subject"));
 		return 0;
 	}
-	int cn_index;
-	if ((cn_index = X509_NAME_get_index_by_NID(subject_name, cn_nid, -1)) < 0 ) {
-		DEBUG(DEBUG_XFRD,2, (LOG_INFO, "CN get name index by nid fail"));
+	/* Extract the CN field */
+	common_name_entry = X509_NAME_get_entry(subject_name, common_name_loc);
+	if (common_name_entry == NULL) {
+		DEBUG(DEBUG_XFRD,2, (LOG_INFO, "CN extraction failed"));
 		return 0;
 	}
-	X509_NAME_ENTRY *cn_entry;
-	if ((cn_entry = X509_NAME_get_entry(subject_name, cn_index)) == NULL) {
-		DEBUG(DEBUG_XFRD,2, (LOG_INFO, "CN name entry fail"));
+	/* Convert the CN field to a C string */
+	common_name_asn1 = X509_NAME_ENTRY_get_data(common_name_entry);
+	if (common_name_asn1 == NULL) {
+		DEBUG(DEBUG_XFRD,2, (LOG_INFO, "CN name to string convertion failed"));
 		return 0;
 	}
-	ASN1_STRING *cn_value;
-	if ((cn_value = X509_NAME_ENTRY_get_data(cn_entry)) == NULL) {
-		DEBUG(DEBUG_XFRD,2, (LOG_INFO, "CN name data fail"));
+	common_name_str = (char *) ASN1_STRING_get0_data(common_name_asn1);
+	/* Make sure there isn't an embedded NUL character in the CN */
+	if ((size_t)ASN1_STRING_length(common_name_asn1) != strlen(common_name_str)) {
+		DEBUG(DEBUG_XFRD,2, (LOG_WARNING, "CN Malformed certificate"));
 		return 0;
 	}
-	char *tmp_cn = NULL;
-	tmp_cn = (char *)ASN1_STRING_get0_data(cn_value);
-	if (tmp_cn == NULL) {
-		DEBUG(DEBUG_XFRD,2, (LOG_INFO, "CN string data fail"));
-		return 0;
-	}
-	/* Ensure CN is properly null terminated */
-	int len = ASN1_STRING_length(cn_value);
-	char *tmp_cn_str = strndup(tmp_cn, len);
-	if (tmp_cn_str != NULL) {
-		*cert_cn = strndup(tmp_cn_str, strlen(tmp_cn_str));
+	if (common_name_str != NULL) {
+		/* store it for logging */
+		*cert_cn = strndup(common_name_str, strlen(common_name_str));
 		/* certificate CN match */
-		if (strncmp(tmp_cn_str, acl_cert_cn, strlen(acl_cert_cn))==0) {
+		if (strncmp(common_name_str, acl_cert_cn, strlen(acl_cert_cn))==0) {
 			return 1;
 		}
 	}
-	DEBUG(DEBUG_XFRD,2, (LOG_INFO, "CN from cert %s does not match acl", tmp_cn));
+	DEBUG(DEBUG_XFRD,2, (LOG_INFO, "CN from cert %s does not match acl", common_name_str));
 	return 0;
 }
 #endif
