@@ -4724,9 +4724,9 @@ tls_handshake(struct tcp_handler_data* data, int fd, int writing)
 
 	/* Use to log successful upgrade for testing - could be removed*/
 	if(data->tls_auth)
-		VERBOSITY(3, (LOG_INFO, "TLS-AUTH handshake succeeded."));
+		VERBOSITY(5, (LOG_INFO, "TLS-AUTH handshake succeeded."));
 	else
-		VERBOSITY(3, (LOG_INFO, "TLS handshake succeeded."));
+		VERBOSITY(5, (LOG_INFO, "TLS handshake succeeded."));
 	/* set back to the event we need to have when reading (or writing) */
 	if(data->shake_state == tls_hs_read && writing) {
 		tcp_handler_setup_event(data, handle_tls_writing, fd, EV_PERSIST|EV_TIMEOUT|EV_WRITE);
@@ -5374,18 +5374,6 @@ handle_tcp_accept(int fd, short event, void* arg)
 			return;
 		}
 		tcp_data->query->tls_auth = tcp_data->tls_auth;
-		tcp_data->shake_state = tls_hs_read;
-		memset(&tcp_data->event, 0, sizeof(tcp_data->event));
-		event_set(&tcp_data->event, s, EV_PERSIST | EV_READ | EV_TIMEOUT,
-			  handle_tls_reading, tcp_data);
-	} else if (data->tls_auth_accept) {
-		tcp_data->tls = NULL;
-		tcp_data->tls_auth = NULL;
-		tcp_data->tls_auth = incoming_ssl_fd(tcp_data->nsd->tls_auth_ctx, s);
-		if(!tcp_data->tls_auth) {
-			close(s);
-			return;
-		}
 		tcp_data->shake_state = tls_hs_read;
 		memset(&tcp_data->event, 0, sizeof(tcp_data->event));
 		event_set(&tcp_data->event, s, EV_PERSIST | EV_READ | EV_TIMEOUT,
