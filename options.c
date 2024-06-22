@@ -1974,7 +1974,7 @@ acl_check_incoming(struct acl_options* acl, struct query* q,
 			/* we have auth_domain_name in tls_auth */
 			if (acl->tls_auth_options && acl->tls_auth_options->auth_domain_name) {
 				q->cert_cn = NULL;
-				if (!acl_tls_cn_matches(q->tls_auth, acl->tls_auth_options->auth_domain_name, &(q->cert_cn))) {
+				if (!acl_tls_hostname_matches(q->tls_auth, acl->tls_auth_options->auth_domain_name, &(q->cert_cn))) {
 					VERBOSITY(3, (LOG_WARNING,
 							"client cert with CN=%s does not match %s CN=%s",
 							q->cert_cn, acl->tls_auth_name, acl->tls_auth_options->auth_domain_name));
@@ -2195,7 +2195,7 @@ acl_addr_match_range_v6(uint32_t* minval, uint32_t* x, uint32_t* maxval, size_t 
 
 #ifdef HAVE_SSL
 int
-acl_tls_cn_matches(SSL* tls_auth, const char* acl_cert_cn, char** cert_cn)
+acl_tls_hostname_matches(SSL* tls_auth, const char* acl_cert_cn, char** cert_cn)
 {
 	X509 *client_cert;
 	*cert_cn = NULL;
@@ -2219,7 +2219,7 @@ acl_tls_cn_matches(SSL* tls_auth, const char* acl_cert_cn, char** cert_cn)
 	 * const char *peername = X509_VERIFY_PARAM_get0_peername(vpm); // NOT ok
 	 */
 
-/* Code bellow from
+/* Code in rest of function is from
  * https://wiki.openssl.org/index.php/Hostname_validation
  * with modifications
  *
