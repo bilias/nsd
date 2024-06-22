@@ -1976,12 +1976,12 @@ acl_check_incoming(struct acl_options* acl, struct query* q,
 				q->cert_cn = NULL;
 				if (!acl_tls_hostname_matches(q->tls_auth, acl->tls_auth_options->auth_domain_name, &(q->cert_cn))) {
 					VERBOSITY(3, (LOG_WARNING,
-							"client cert with CN=%s does not match %s CN=%s",
+							"client cert %s does not match %s %s",
 							q->cert_cn, acl->tls_auth_name, acl->tls_auth_options->auth_domain_name));
 					q->cert_cn = NULL;
 					return -1;
 				}
-				VERBOSITY(5, (LOG_INFO, "%s CN=%s verified",
+				VERBOSITY(5, (LOG_INFO, "%s %s verified",
 					acl->tls_auth_name, acl->tls_auth_options->auth_domain_name));
 				q->cert_cn = acl->tls_auth_options->auth_domain_name;
 			} else {
