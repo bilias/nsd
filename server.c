@@ -5315,10 +5315,11 @@ handle_tcp_accept(int fd, short event, void* arg)
 	tcp_data->query_count = 0;
 #ifdef HAVE_SSL
 	tcp_data->shake_state = tls_hs_none;
-	if (data->tls_accept)
+	/* initialize both incase of dangling pointers */
+	if (data->tls_accept || data->tls_auth_accept) {
 		tcp_data->tls = NULL;
-	if (data->tls_auth_accept)
 		tcp_data->tls_auth = NULL;
+	}
 #endif
 	tcp_data->query_needs_reset = 1;
 	tcp_data->pp2_enabled = data->pp2_enabled;
@@ -5353,8 +5354,6 @@ handle_tcp_accept(int fd, short event, void* arg)
 
 #ifdef HAVE_SSL
 	if (data->tls_accept) {
-		tcp_data->tls = NULL;
-		tcp_data->tls_auth = NULL;
 		tcp_data->tls = incoming_ssl_fd(tcp_data->nsd->tls_ctx, s);
 		if(!tcp_data->tls) {
 			close(s);
@@ -5366,8 +5365,6 @@ handle_tcp_accept(int fd, short event, void* arg)
 		event_set(&tcp_data->event, s, EV_PERSIST | EV_READ | EV_TIMEOUT,
 			  handle_tls_reading, tcp_data);
 	} else if (data->tls_auth_accept) {
-		tcp_data->tls = NULL;
-		tcp_data->tls_auth = NULL;
 		tcp_data->tls_auth = incoming_ssl_fd(tcp_data->nsd->tls_auth_ctx, s);
 		if(!tcp_data->tls_auth) {
 			close(s);
