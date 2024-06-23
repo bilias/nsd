@@ -253,7 +253,7 @@ static int axfr_ixfr_can_admit_query(struct nsd* nsd, struct query* q)
 			dname_to_string(q->qname, NULL), a,
 			(q->tls||q->tls_auth)?(q->tls?"tls":"tls-auth"):""));
 #else
-		VERBOSITY(1, (LOG_INFO, "%s for %s from %s %s",
+		VERBOSITY(1, (LOG_INFO, "%s for %s from %s",
 			(q->qtype==TYPE_AXFR?"axfr":"ixfr"),
 			dname_to_string(q->qname, NULL), a));
 #endif
