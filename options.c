@@ -14,6 +14,10 @@
 #ifdef HAVE_IFADDRS_H
 #include <ifaddrs.h>
 #endif
+#ifdef HAVE_SSL
+#include <openssl/ssl.h>
+#include <openssl/x509v3.h>
+#endif
 #include "options.h"
 #include "query.h"
 #include "tsig.h"
