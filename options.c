@@ -2204,7 +2204,11 @@ acl_tls_hostname_matches(SSL* tls_auth, const char* acl_cert_cn, char** cert_cn)
 	X509 *client_cert;
 	*cert_cn = NULL;
 
+#  ifdef HAVE_SSL_GET0_PEER_CERTIFICATE
 	if ((client_cert = SSL_get0_peer_certificate(tls_auth)) == NULL) {
+#  else
+	if ((client_cert = SSL_get_peer_certificate(tls_auth)) == NULL) {
+#  endif
 		DEBUG(DEBUG_XFRD,2, (LOG_INFO, "CN match fail no peer certificate"));
 		return 0;
 	}
