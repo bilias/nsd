@@ -10,12 +10,10 @@
 #ifndef OPTIONS_H
 #define OPTIONS_H
 
+#include <stdarg.h>
 #ifdef HAVE_SSL
 #include <openssl/ssl.h>
-#include <openssl/x509v3.h>
 #endif
-
-#include <stdarg.h>
 #include "region-allocator.h"
 #include "rbtree.h"
 struct query;
